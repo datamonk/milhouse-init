@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+
+##
+# desc: This script provides common helper functions for docker/podman
+#       commands.
+##
+# Helper functions for using Docker in shell scripts, revision 3
+# Copyright (C) 2016,2017,2022-2023 Davide Madrisan <davide.madrisan@gmail.com>
+##
+
+##
+# Private validation definitions/functions
+##
+__PROGNAME="${0##*/}"
+__die(){ echo "${__PROGNAME}: error: $1" 1>&2; exit 1; };
+__isnotempty(){ [ "$1" ] && return 0 || return 1; };
+__validate_input(){
+   [ "$2" ] || __die "$1 requires an argument (container name)"
+};
+
+##
+# Docker service functions
+##
+function docker_is_active(){
+  # returns 0 if init.d service is in an 'active' state.
+  # args: systemctl service name
+  #sudo systemctl is-active --quiet docker
+  # we should use the existing function sourced from lib/os.sh
+  sysctl_service_is_active "docker"
+};
+##
+# Container functions
+##
+function container_id(){
+   # doc.desc: return the _Docker Id_ of a container
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   sudo docker inspect --format='{{.Id}}' "$1" 2>/dev/null
+};
+
+function container_exists(){
+   # doc.desc: return true if the container exists, and false otherwise
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   __isnotempty "$(container_id "$1")"
+};
+
+function container_is_running(){
+   # doc.desc: return true if the container is running, and false otherwise
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   __isnotempty "$(\
+sudo docker ps -q --filter "name=$1" --filter 'status=running' 2>/dev/null)"
+};
+
+function container_stop(){
+   # doc.desc: stop a container, if it's running
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   container_is_running "$1" && sudo docker stop "$1"
+};
+
+function container_remove(){
+   # doc.desc: stop and remove a container from the host node
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   container_stop "$1" >/dev/null &&
+      sudo docker rm -f "$1" >/dev/null
+};
+
+function container_exec_command(){
+   # doc.desc: run a command (or a sequence of commands) inside a container
+   # doc.args: container name
+   __validate_input "${FUNCNAME[0]}" "$1"
+   sudo docker exec -it "$1" /bin/sh -c "$2"
+};
+
+function container_property(){
+   # doc.desc: get a container property
+   # doc.args: container name and one of the options: --id, --ipaddr, --os
+   local container_name
+   local property
+
+   while test -n "$1"; do
+      case "$1" in
+         --id) property="id" ;;
+         --ipaddr) property="ipaddr" ;;
+         --os) property="os" ;;
+         --*|-*) __die "${FUNCNAME[0]}: unknown switch \"$1\"" ;;
+         *) container_name="$1" ;;
+      esac
+      shift
+   done
+
+   __validate_input "${FUNCNAME[0]}" "$container_name"
+   container_exists "$container_name" || {
+      echo "unknown-no_such_container"; return; }
+   container_is_running "$container_name" || {
+      echo "unknown-not_running"; return; }
+
+   case "$property" in
+      "id")
+          container_id "$container_name" ;;
+      "ipaddr")
+          sudo docker inspect \
+             --format '{{ .NetworkSettings.IPAddress }}' \
+             "$container_name" 2>/dev/null ;;
+      "os")
+          local os="unknown-os"
+          # CentOS release 6.8 (Final)
+          # CentOS Linux release 7.2.1511 (Core)
+          # Fedora release 24 (Twenty Four)
+          local -r container_os="$(\
+container_exec_command "$container_name" "\
+   if [ -r /etc/redhat-release ]; then
+      cat /etc/redhat-release
+   elif [ -r /etc/os-release ]; then
+      . /etc/os-release
+      echo \$ID \$VERSION_ID
+   elif [ -r /etc/debian_version ]; then
+      echo -n 'debian '
+      cat /etc/debian_version
+   fi")"
+          set -- $container_os
+	  if [ "$1" = "alpine" ]; then
+             os="alpine-${2}"
+          elif [ "$1" = "CentOS" ]; then
+             [ "$2" = "Linux" ] && os="centos-${4}" || os="centos-${3}"
+          elif [ "$1" = "Fedora" ]; then
+             os="fedora-${3}"
+          elif [ "$1" = "Rocky" ]; then
+             os="rockylinux-${4}"
+          elif [ "$1" = "debian" ]; then
+             os="debian-${2}"
+          fi
+          echo "$os"
+      ;;
+      *) __die "${FUNCNAME[0]}: unknown property \"$property\"" ;;
+   esac
+}
+
+function container_create(){
+   # doc.desc: create a container and return its name
+   # doc.args: --name (or --random-name), --os and a host folder (--disk) to map
+   # doc.example: container_create --random-name --os "centos:latest" --disk ~/docker-datadisk:/shared:rw
+   local disk=
+   local name=
+   local os=
+
+   local random_name=0
+
+   while test -n "$1"; do
+      case "$1" in
+         --disk) disk="$2"; shift ;;
+         --name) name="$2"; shift ;;
+         --random-name) random_name=1 ;;
+         --os) os="$2"; shift ;;
+         --*|-*) __die "${FUNCNAME[0]}: unknown switch \"$1\"" ;;
+         *) __die "${FUNCNAME[0]}: unknown option(s): $*" ;;
+      esac
+      shift
+   done
+
+   [ "$os" ] || __die "${FUNCNAME[0]}: --os has not been set"
+   if [ "$random_name" = 1 ]; then
+      name="$(echo "$os" | sed "s/[:\/]/_/g")_$(</dev/urandom tr -dc _A-Z-a-z-0-9 | head -c8)"
+   elif [ -z "$name" ]; then
+      __die "${FUNCNAME[0]}: --name has not been set"
+   fi
+
+   if ! (container_exists "$name" ||
+      sudo docker run -itd --name="$name" ${disk:+-v $disk} "$os" \
+         "/bin/sh" >/dev/null); then
+      __die "${FUNCNAME[0]}: cannot instantiate the container $name"
+   fi
+   echo "$name"
+};
+
+function container_start(){
+   # doc.desc: start a container if not running
+   # doc.args: container name
+   container_is_running "$1" || sudo docker start "$1"
+};
+
+function container_status_table(){
+   # doc.desc: return the status of a container
+   # doc.args: container name of no args to list all the containers
+   [ "$1" ] && { sudo docker ps --filter "name=$1"; return; }
+   sudo docker ps -a
+};
+
+function container_list(){
+   # doc.desc: return the available container name
+   # doc.args: none
+   sudo docker ps -qa --format='{{.Names}}' 2>/dev/null
+};
+
+##
+## Image Functions
+##
+
+function image_prune_dangle(){
+  # doc.desc: remove 'dangling' images only. which un-tagged, and not assocaited to any container.
+  # doc.args: none
+  sudo docker image prune --force
+};
+
+function image_prune_all(){
+ # doc.desc: remove all image which aren't associated with atleast one container.
+ # doc.args: none
+ sudo docker image prune -a --force
+};
+
+##
+# Global/System Functions
+function nuke_docker_data(){
+  sudo docker system prune --all --volumes --force
+};
+
+
+##
+# Compose functions
+##
+#function compose_action_from_file(){
+  # TODO: Parse compose file for 'container_name' feild using yq
+  # syntax would be something like:
+  # $ cat compose.yaml | /home/afcamar/proj/software/yq-v4.44.6/yq -C -r '.'
+  #
+  # filter down to container name values
+  # $ cat compose.yaml | /home/afcamar/proj/software/yq-v4.44.6/yq -C -r '.services[] | .container_name'
+  #
+  #   mongodb
+  #   unifi-network-application
+#};
+
+function compose_conf_up(){
+  # doc.desc: start unifi container(s) stack via compose.yaml pointer if not already running.
+  # doc.args: path to compose.[yml,yaml] file
+  container_is_running "unifi" || sudo docker compose -f "$1" up -d
+};
+
+function compose_unifi_stop(){
+  container_is_running "unifi" && sudo docker compose -f "$1" down
+};
+
+function compose_unifi_pull(){
+  sudo docker compose -f "$1" pull
+};
+
+function compose_unifi_logs(){
+  sudo docker compose -f "$1" logs -tf --tail="$2"
+};
+
+# TODO: Add a new function to ensure the state of mongodb container.
+# A basic validation that the container is in a running state and
+# the target client port is listening. That should good enough initially.
+
+# Remove all unused networks
+#alias drmn="docker network prune"
+
+# Force remove all unused networks
+#alias drmnf="docker network prune -f"
+
+# Bash into running container
+#dbash() { docker exec -it $@ bash; }
+
+# shell into running container. Some images don't have bash
+#dsh() { docker exec -it $@ sh; }

@@ -21,9 +21,9 @@ function mntUSB(){
   local -r usbmnt="/media/$USER/ORBITKEY";
   local -r mntuser="$USER";
   if [[ -b "$usbdev" ]]; then
-  # sudo mount $usbdev $usbmnt -o uid=$mntuser,gid=$mntuser \
+    sudo mount $usbdev $usbmnt -o uid=$mntuser,gid=$mntuser \
     bsdir="$usbmnt/hc/bootstrap"
-    #log_info "USB media mounted at: [$(mount | grep $usbmnt)]"
+    log_info "USB media mounted at: [$(mount | grep $usbmnt)]"
   fi
 };
 function mkDirs(){
@@ -41,13 +41,13 @@ function mkDirs(){
 };
 function confGit(){
   local -r gitemail="";
-  local -r gituser="$USER";
+  #local -r gituser="$USER";
   local -r gitcreds="$bsdir/.git-token";
   local -r bsrepo="https://$(cat $gitcreds)@github.com/datamonk/hamster-cannon.git";
   if [[ -f "$gitcreds" ]]; then
     log_info "Applying global setting for git env."
     git config --global user.email "$gitemail" \
-    && git config --global user.name "$gituser" \
+    && git config --global user.name "$USER" \
     && git config --global credential.helper "store --file $HOME/.git-credentials" \
     && git clone "$bsrepo"
   fi
@@ -63,19 +63,18 @@ function confSsh(){
     ssh-keygen -b 4096 -q -t rsa -P '' -f id_rsa && ssh-add
   else
     # set source perms to 600 for files
-    cp --preserve=mode,ownership,timestamps --no-clobber "$bsdir/.ssh/*" "$HOME/.ssh/" \
+    cp -R --preserve=mode,ownership,timestamps --no-clobber "$bsdir/.ssh/*" "$HOME/.ssh/" \
     && ssh-add
   fi
-  install -m 600 /dev/null ${SSH_DIR}/config
-  echo 'ForwardX11Trusted yes' >> ${SSH_DIR}/config
-  echo 'ConnectTimeout 0' >> ${SSH_DIR}/config
-  echo '' >> ${SSH_DIR}/config
-  echo 'Host localhost' >> ${SSH_DIR}/config
-  echo "  HostName $(hostname)" >> ${SSH_DIR}/config # note prefixed [spaces]
-  echo '' >> ${SSH_DIR}/config
-  echo 'Host *' >> ${SSH_DIR}/config
-  echo '  ForwardX11 yes' >> ${SSH_DIR}/config
-  echo '  ForwardAgent yes' >> ${SSH_DIR}/config
+  install -m 600 /dev/null $sshdir/config
+  echo -e \
+    "ForwardX11Trusted yes\n
+    ConnectTimeout 0\n\n
+    Host localhost\n
+    \s\sHostName $(hostname)\n\n
+    Host *\n
+    \s\sForwardX11 yes\n
+    \s\sForwardAgent yes" >> $sshdir/config
 };
 function updatePi(){
   sudo apt --yes update \
@@ -92,17 +91,11 @@ function updatePi(){
   && sudo rpi-eeprom-update -a
 };
 function installDocker(){
-  sudo ${WAI}/install-docker.sh --channel stable # --include-dryrun not working...
+  sudo ${wai}/install-docker.sh --channel stable
   if [[ $(docker_is_active) = 0 ]]; then
     sudo usermod -aG docker $USER
     if [[ $(is_docker_grp_member $USER) = 0 ]]; then
       log_info "$USER has successfully been added to docker group."
-      log_warn "rebooting in 15 seconds..."
-      sleep 5
-      log_warn "rebooting in 10 seconds..."
-      sleep 5
-      log_warn "rebooting in 5 seconds..."
-      sleep 5 && shutdown -r now
     fi
   else
     log_error "docker service is not running after installation."
@@ -110,16 +103,17 @@ function installDocker(){
     log_error "#######"
     sudo systemctl status docker && sudo systemctl status docker.socket
     log_error "#######"
+    exit 1
   fi
 };
 function bounce(){
-  echo "rebooting in 15 seconds..." && sleep 5
-  echo "rebooting in 10 seconds..." && sleep 5
-  echo "rebooting in 5 seconds..." && sleep 5
+  log_warn "rebooting in 15 seconds..." && sleep 5
+  log_warn "rebooting in 10 seconds..." && sleep 5
+  log_warn "rebooting in 5 seconds..." && sleep 5
   shutdown -r now
 };
 function fire(){
-  mntUSB
+  #mntUSB
   mkDirs
   confGit
   confSsh
