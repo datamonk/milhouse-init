@@ -22,7 +22,7 @@ function mntUSB(){
   local -r usbmnt='/mnt/usb';
   local -r mntuser='afcamar';
   if [[ -b "$usbdev" ]]; then
-     mount $usbdev $usbmnt -o uid=$mntuser,gid=$mntuser \
+     sudo mount $usbdev $usbmnt -o uid=$mntuser,gid=$mntuser \
     && bsdir="$usbmnt/hc/bootstrap"
     log_info "USB media mounted at: [$(mount | grep $usbmnt)]"
   fi
@@ -58,10 +58,11 @@ function confSsh(){
   mkd(){
     mkdir -p "$@" && chmod 740 "$_" && cd "$_";
   };
-  sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ /etc/ssh/sshd_config \
-  &&  systemctl start ssh
+  sudo sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ /etc/ssh/sshd_config \
+  &&  sudo systemctl start ssh
   if [[ "$newkeypair" = "true" ]]; then
-    ssh-keygen -t rsa && ssh-add
+    #ssh-keygen -t rsa && ssh-add
+    ssh-keygen -b 4096 -q -t rsa -P '' -f id_rsa && ssh-add
   else
     # set source perms to 600 for files
     cp --preserve=mode,ownership,timestamps --no-clobber "$bsdir/.ssh/*" "$HOME/.ssh/" \
@@ -79,18 +80,17 @@ function confSsh(){
   fi
 };
 function updatePi(){
-  apt --yes update \
-  &&  apt --yes full-upgrade \
-  &&  apt --yes install \
+  sudo apt --yes update \
+  &&  sudo apt --yes full-upgrade \
+  &&  sudo apt --yes install \
       htop \
       vim \
-      vscode \
       terminator \
       nodejs \
       default-jdk \
       nodejs \
-  && apt --yes autoremove \
-  && rpi-eeprom-update -a
+  && sudo apt --yes autoremove \
+  && sudo rpi-eeprom-update -a
 };
 function bounce(){
   echo "bootstrap-init stage done."
