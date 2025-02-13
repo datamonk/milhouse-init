@@ -134,7 +134,7 @@ function updatePi(){
 function installDocker(){
   mkd "$HOME/.scripts"
   local -r dget="https://get.docker.com"
-  local -r dscr=".install-docker.sh"
+  local -r dscr="install-docker.sh"
   local -r chan="stable"
   curl -fsSL $dget -o $dscr && chmod 750 $dscr
   sh $dscr --channel $chan #--dryrun
@@ -148,17 +148,17 @@ function installDocker(){
 };
 function confKeyboard(){
   local -r klpath="/etc/default/keyboard"
-  local -r model="pc98"
+  local -r model="pc98" # this layout has issues w/ rk-royal 98k
   local -r layout="us"
   sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
   sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
-}
+};
 function bounce(){
   log_warn "rebooting in 15 seconds..." && sleep 5
   log_warn "rebooting in 10 seconds..." && sleep 5
   log_warn "rebooting in 5 seconds..." && sleep 5
   shutdown -r now
-}
+};
 function execInit(){
   mntUSB
   mkDirs
