@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eu
 
 __PROGNAME="${0##*/}"
 __die(){ echo "${__PROGNAME}: error: $1" 1>&2; exit 1; };
@@ -10,10 +11,38 @@ __validate_input(){
 #    __isnotempty "$(container_id "$1")"
 };
 mkd(){ mkdir -p "$@" && cd "$_"; };
-
 wai=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd);
-#source $wai/.lib/src-libs.sh
-source $wai/.env
+
+## logger ##
+bold=""
+reset="\e[0m"
+green="\e[1;32m"
+orange="\e[1;33m"
+purple="\e[1;35m"
+red="\e[1;31m"
+white="\e[1;37m"
+yellow="\e[1;33m"
+function echo_stderr(){ >&2 echo "$@"; };
+function log(){
+  local -r level="$1"
+  local -r message="$2"
+  local -r timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local -r script_name="$(basename "$0")"
+  echo_stderr -e "${timestamp} [${level}] [$script_name] ${message}"
+};
+function log_info(){
+  local -r message="$1"
+  log "${bold}${green}INFO${reset}" "$message"
+};
+function log_warn(){
+  local -r message="$1"
+  log "${bold}${yellow}WARN${reset}" "$message"
+};
+function log_error(){
+  local -r message="$1"
+  log "${bold}${red}ERROR${reset}" "$message"
+};
+####
 
 function mntUSB(){
   local -r usbdev='/dev/sda1';
@@ -21,7 +50,6 @@ function mntUSB(){
     usbmnt=$(mount | grep "$usbdev" | cut -d' ' -f3)
     if [[ $(__isnotempty $usbmnt) -eq 0 ]]; then
       log_info "existing $usbdev mnt found at [ $usbmnt ]"
-      continue
     else
       usbmnt="/media/$USER/ORBITKEY"; # failback to static def
       log_warn "$usbdev mnt point returned null. attempting to mnt at [ $usbmnt ]"
@@ -64,8 +92,8 @@ function confGit(){
 };
 function confSsh(){
   local -r newkeypair="true"; # false to cp from usb
-  mkd "$HOME/.ssh" && chmod 740 "$wai/../.ssh"
-
+  mkd "$HOME/.ssh"
+  chmod 740 "$HOME/.ssh"
   sudo sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ /etc/ssh/sshd_config \
   &&  sudo systemctl enable ssh && sudo systemctl start ssh
   if [[ "$newkeypair" = "true" ]]; then
