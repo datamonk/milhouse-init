@@ -10,6 +10,18 @@ __validate_input(){
 #    __validate_input "${FUNCNAME[0]}" "$1"
 #    __isnotempty "$(container_id "$1")"
 };
+__is_terminal(){ [[ -t 1 || -z ${TERM} ]] && return 0 || return 1; };
+__checkInterweb(){
+  declare check_internet
+  if __is_terminal; then
+    check_internet="$(sh -ic 'exec 3>&1 2>/dev/null; { curl --compressed -Is google.com 1>&3; kill 0; } | { sleep 10; kill 0; }' || :)"
+  else
+    check_internet="$(curl --compressed -Is google.com -m 10)"
+  fi
+  if [[ -z ${check_internet} ]]; then
+    return 1
+  fi
+};
 mkd(){ mkdir -p "$@" && cd "$_"; };
 wai=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd);
 
@@ -44,6 +56,8 @@ function log_error(){
 };
 ####
 
+####
+
 function mntUSB(){
   local -r usbdev='/dev/sda1';
   if [[ -b "$usbdev" ]]; then
@@ -67,7 +81,6 @@ function mkDirs(){
   mkdir -p "$HOME/proj/software" \
            "$HOME/data" \
            "$HOME/certs" \
-           "$HOME/scripts" \
            "$HOME/tmp" \
            "$HOME/.secrets"
   ln -s proj/github gh \
@@ -85,33 +98,28 @@ function confGit(){
     && git config --global credential.helper "store --file $HOME/.git-credentials"
     mkd "$HOME/proj/github" \
     && git clone "$bsrepo"
-    if [[ ! -f ./"README.md" ]]; then
+    if [[ ! -f "$wai/hamster-cannon/README.md" ]]; then
       log_error "hamster-cannon repo clone failed."
+      __die "${FUNCNAME[0]}: private hamster-cannon repo clone failed and it's needed to proceed. bailing."
     fi
   fi
 };
 function confSsh(){
-  local -r newkeypair="true"; # false to cp from usb
+  local -r newkeypair="true";
+  local -r sshdconf="/etc/ssh/sshd_config";
   mkd "$HOME/.ssh"
   chmod 740 "$HOME/.ssh"
-  sudo sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ /etc/ssh/sshd_config \
-  &&  sudo systemctl enable ssh && sudo systemctl start ssh
+  sudo sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ $sshdconf \
+  && sudo sed -i "s/PermitRootLogin *.*/PermitRootLogin No/" $ssh_config \
+  && sudo systemctl enable ssh && sudo systemctl start ssh
   if [[ "$newkeypair" = "true" ]]; then
-    #ssh-keygen -t rsa && ssh-add
     ssh-keygen -b 4096 -q -t rsa -P '' -f id_rsa && ssh-add
   else
     # set source perms to 600 for files
     cp -R --preserve=mode,timestamps --no-clobber "$bsdir/.ssh/id_*" "$HOME/.ssh/" && ssh-add
   fi
   install -m 600 /dev/null $HOME/.ssh/config
-  echo -e \
-    "ForwardX11Trusted yes\n
-    ConnectTimeout 0\n\n
-    Host localhost\n
-    \s\sHostName $(hostname)\n\n
-    Host *\n
-    \s\sForwardX11 yes\n
-    \s\sForwardAgent yes" >> $HOME/.ssh/config
+  echo -e "ForwardX11Trusted yes\nConnectTimeout 0\n\nHost localhost\n  HostName $(hostname)\n\nHost *\n  ForwardX11 yes\n  ForwardAgent yes" >> $HOME/.ssh/config
 };
 function updatePi(){
   sudo apt --yes update \
@@ -128,11 +136,12 @@ function updatePi(){
   && sudo rpi-eeprom-update -a
 };
 function installDocker(){
+  mkd "$HOME/.scripts"
   local -r dget="https://get.docker.com"
   local -r dscr=".install-docker.sh"
   local -r chan="stable"
   curl -fsSL $dget -o $dscr && chmod 750 $dscr
-  sh deploy-docker.sh --channel $chan #--dryrun
+  sh $dscr --channel $chan #--dryrun
   if [[ $(sudo systemctl is-active --quiet docker) -eq 0 ]]; then
     sudo usermod -aG docker $USER
     if [[ $(sudo getent group docker | grep $USER) -eq 0 ]]; then
@@ -149,9 +158,20 @@ function installDocker(){
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
   fi
 };
+function setKeyboardLayout(){
+  local -r klpath="/etc/default/keyboard"
+  local -r model="pc98"
+  local -r layout="us"
+  sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
+  sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
+}
 function fire(){
   mntUSB
   mkDirs
+  if [[ $(__checkInterweb) -eq 1 ]]; then
+    log_error "unable to connect to public domain."
+    __die "${FUNCNAME[0]}: Check network settings. bailing."
+  fi
   confGit
   confSsh
   updatePi
