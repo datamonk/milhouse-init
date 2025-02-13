@@ -128,7 +128,11 @@ function updatePi(){
   && sudo rpi-eeprom-update -a
 };
 function installDocker(){
-  sudo $wai/install-docker.sh --channel stable
+  local -r dget="https://get.docker.com"
+  local -r dscr=".install-docker.sh"
+  local -r chan="stable"
+  curl -fsSL $dget -o $dscr && chmod 750 $dscr
+  sh deploy-docker.sh --channel $chan #--dryrun
   if [[ $(sudo systemctl is-active --quiet docker) -eq 0 ]]; then
     sudo usermod -aG docker $USER
     if [[ $(sudo getent group docker | grep $USER) -eq 0 ]]; then
@@ -138,22 +142,20 @@ function installDocker(){
       log_warn "rebooting in 15 seconds..." && sleep 5
       log_warn "rebooting in 10 seconds..." && sleep 5
       log_warn "rebooting in 5 seconds..." && sleep 5
-      shutdown -r now
+      #shutdown -r now
     fi
   else
     log_error "docker service is not running after install."
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
   fi
 };
-
 function fire(){
   mntUSB
   mkDirs
   confGit
   confSsh
   updatePi
-  bounce
+  installDocker
 };
-
 fire
 exit 0
