@@ -140,7 +140,7 @@ function installDocker(){
   sh $dscr --channel $chan #--dryrun
   if [[ $(sudo systemctl is-active --quiet docker) -eq 0 ]]; then
     sudo usermod -aG docker $USER
-    log_info "$USER added to 'docker' grp.\n [ $usergrps ]"
+    log_info "$USER added to docker grp."
   else
     log_error "docker service is not running after install."
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
