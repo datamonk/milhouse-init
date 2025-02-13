@@ -1,14 +1,21 @@
 #!/bin/bash
 set -eu
 
+bold=""
+reset="\e[0m"
+green="\e[1;32m"
+purple="\e[1;35m"
+red="\e[1;31m"
+yellow="\e[1;33m"
+
 __PROGNAME="${0##*/}"
-__die(){ echo "${__PROGNAME}: error: $1" 1>&2; exit 1; };
+__die(){ echo "${bold}${purple}${__PROGNAME}${reset}: error: $1" 1>&2; exit 1; };
 __isnotempty(){ [ "$1" ] && return 0 || return 1; };
 __validate_input(){
    [ "$2" ] || __die "$1 requires an argument str"
-#  example usage:
-#    __validate_input "${FUNCNAME[0]}" "$1"
-#    __isnotempty "$(container_id "$1")"
+  #  __die "${FUNCNAME[0]}: kaboom."
+  #  __validate_input "${FUNCNAME[0]}" "$1"
+  #  __isnotempty "$(container_id "$1")"
 };
 __is_terminal(){ [[ -t 1 || -z ${TERM} ]] && return 0 || return 1; };
 __checkInterweb(){
@@ -24,16 +31,6 @@ __checkInterweb(){
 };
 mkd(){ mkdir -p "$@" && cd "$_"; };
 wai=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd);
-
-## logger ##
-bold=""
-reset="\e[0m"
-green="\e[1;32m"
-orange="\e[1;33m"
-purple="\e[1;35m"
-red="\e[1;31m"
-white="\e[1;37m"
-yellow="\e[1;33m"
 function echo_stderr(){ >&2 echo "$@"; };
 function log(){
   local -r level="$1"
@@ -55,9 +52,7 @@ function log_error(){
   log "${bold}${red}ERROR${reset}" "$message"
 };
 ####
-
 ####
-
 function mntUSB(){
   local -r usbdev='/dev/sda1';
   if [[ -b "$usbdev" ]]; then
@@ -88,9 +83,11 @@ function mkDirs(){
   && ln -s .secrets .creds
 };
 function confGit(){
-  local -r gitemail="acamara86@gmail.com";
+  local -r gitemail="$USER@gmail.com";
   local -r gitcreds="$bsdir/.git-token";
-  local -r bsrepo="https://$(cat $gitcreds)@github.com/datamonk/hamster-cannon.git";
+  local -r reposlug="datamonk/hamster-cannon.git";
+  local -r reponame="$(basename "$reposlug" | cut -d'.' -f1)";
+  local -r bsrepo="https://$(cat $gitcreds)@github.com/$reposlug";
   if [[ -f "$gitcreds" ]]; then
     log_info "Applying global setting for git env."
     git config --global user.email "$gitemail" \
@@ -98,9 +95,9 @@ function confGit(){
     && git config --global credential.helper "store --file $HOME/.git-credentials"
     mkd "$HOME/proj/github" \
     && git clone "$bsrepo"
-    if [[ ! -f "$wai/hamster-cannon/README.md" ]]; then
-      log_error "hamster-cannon repo clone failed."
-      __die "${FUNCNAME[0]}: private hamster-cannon repo clone failed and it's needed to proceed. bailing."
+    if [[ ! -f "$HOME/proj/github/$reponame/README.md" ]]; then
+      log_error "$reposlug repo clone failed."
+      __die "${FUNCNAME[0]}: private tokenized repo clone failed and required to proceed. bailing."
     fi
   fi
 };
@@ -110,12 +107,11 @@ function confSsh(){
   mkd "$HOME/.ssh"
   chmod 740 "$HOME/.ssh"
   sudo sed -i.bak s/\#PasswordAuthentication\ yes/PasswordAuthentication\ yes/ $sshdconf \
-  && sudo sed -i "s/PermitRootLogin *.*/PermitRootLogin No/" $ssh_config \
+  && sudo sed -i "s/PermitRootLogin *.*/PermitRootLogin No/" $sshdconf \
   && sudo systemctl enable ssh && sudo systemctl start ssh
   if [[ "$newkeypair" = "true" ]]; then
     ssh-keygen -b 4096 -q -t rsa -P '' -f id_rsa && ssh-add
   else
-    # set source perms to 600 for files
     cp -R --preserve=mode,timestamps --no-clobber "$bsdir/.ssh/id_*" "$HOME/.ssh/" && ssh-add
   fi
   install -m 600 /dev/null $HOME/.ssh/config
@@ -144,28 +140,26 @@ function installDocker(){
   sh $dscr --channel $chan #--dryrun
   if [[ $(sudo systemctl is-active --quiet docker) -eq 0 ]]; then
     sudo usermod -aG docker $USER
-    if [[ $(sudo getent group docker | grep $USER) -eq 0 ]]; then
-      local -r usergrps=$(id -g -n)
-      log_info "$USER added to 'docker' grp.\n [ $usergrps ]"
-      log_info "stage 00 complete for $HOSTNAME bootstrap."
-      log_warn "rebooting in 15 seconds..." && sleep 5
-      log_warn "rebooting in 10 seconds..." && sleep 5
-      log_warn "rebooting in 5 seconds..." && sleep 5
-      #shutdown -r now
-    fi
+    log_info "$USER added to 'docker' grp.\n [ $usergrps ]"
   else
     log_error "docker service is not running after install."
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
   fi
 };
-function setKeyboardLayout(){
+function confKeyboard(){
   local -r klpath="/etc/default/keyboard"
   local -r model="pc98"
   local -r layout="us"
   sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
   sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
 }
-function fire(){
+function bounce(){
+  log_warn "rebooting in 15 seconds..." && sleep 5
+  log_warn "rebooting in 10 seconds..." && sleep 5
+  log_warn "rebooting in 5 seconds..." && sleep 5
+  shutdown -r now
+}
+function execInit(){
   mntUSB
   mkDirs
   if [[ $(__checkInterweb) -eq 1 ]]; then
@@ -176,6 +170,9 @@ function fire(){
   confSsh
   updatePi
   installDocker
+  confKeyboard
+  log_info "00-init complete for $HOSTNAME bootstrap."
+  bounce
 };
-fire
+execInit
 exit 0
