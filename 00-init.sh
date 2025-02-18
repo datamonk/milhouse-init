@@ -94,64 +94,6 @@ updatePi(){
   && sudo rpi-eeprom-update -a \
   && sudo raspi-config nonint do_update
 };
-confPyEnv(){
-  # ref, https://www.raspberrypi.com/documentation/computers/os.html#use-python-on-a-raspberry-pi
-  local -r venvdir="$HOME/.env";
-  python -m venv --system-site-packages $venvdir \
-  && source $venvdir/bin/activate
-  ## venv context ##
-  python -m pip list \
-  && python -m pip install \
-    sparkfun-qwiic \
-    sparkfun-qwiic-as6212 \
-    sparkfun-qwiic-proximity \
-    sparkfun-top-phat-button \
-    adafruit-circuitpython-neopixel \
-    pyalsaaudio
-    # ...
-    # Arduino IDE v2 Install: https://docs.arduino.cc/software/ide-v2/tutorials/getting-started/ide-v2-downloading-and-installing/?_gl=1*190ql9d*_up*MQ..*_ga*MjAxMDI3NDMwNC4xNzM5OTA5ODk1*_ga_NEXN8H46L5*MTczOTkwOTg5NC4xLjEuMTczOTkxMDA1MS4wLjAuMzA1MjE0NDk.#linux
-
-    # lib install: https://docs.arduino.cc/software/ide-v2/tutorials/ide-v2-installing-a-library/?_gl=1*16yvk8f*_up*MQ..*_ga*MjAxMDI3NDMwNC4xNzM5OTA5ODk1*_ga_NEXN8H46L5*MTczOTkwOTg5NC4xLjEuMTczOTkxMDA3NC4wLjAuMzA1MjE0NDk.
-
-    # USB sink power sensor docs:
-    # Lib > https://github.com/sparkfun/SparkFun_STUSB4500_Arduino_Library
-    # hardware repo > https://github.com/sparkfun/Power_Delivery_Board-USB-C
-  deactivate
-  ## venv context ##
-};
-confQwiicSensors(){
-  local -r dispdev="HDMI-1";
-  local -r scardconf="/usr/share/alsa/alsa.conf";
-  #https://www.raspberrypi.com/documentation/computers/configuration.html#underscan-nonint
-  sudo raspi-config nonint do_overscan_kms $dispdev 1 # overscan (disable for topphat support)
-  sudo raspi-config nonint do_vnc 1 # vnc server (disable)
-  sudo raspi-config nonint do_rpi_connect 1 # rpi connect (disable)
-  ## interfaces
-  sudo raspi-config nonint do_spi 0 # spi kernel module (enable for topphat support)
-  sudo raspi-config nonint do_i2c 0 # i2c kernel module (enable for topphat support)
-  # audio codec (topphat)
-  git clone https://github.com/waveshare/WM8960-Audio-HAT \
-  && cd WM8960-Audio-HAT
-  sudo bash install.sh # reboot is needed for changes to take effect.
-  # verify after reboot with:
-  # $ sudo dkms status
-  #   ex. retval: wm8960-soundcard, 1.0, 4.19.66-v7+, arm7l: installed
-  # sound card settings (topphat speaker)
-  sudo sed -i.bak "s/defaults.ctl.card *.*/defaults.ctl.card 0/" $scardconf \
-  && sudo sed -i.bak "s/defaults.pcm.card *.*/defaults.pcm.card 0/" $scardconf \
-  && sudo sed -i.bak "s/defaults.pcm.device *.*/defaults.pcm.device 0/" $scardconf
-  # display overlay for 5.4+ kernel
-  # download > https://cdn.sparkfun.com/assets/learn_tutorials/1/1/7/0/sfe-topphat-overlay.dts
-  dtc -@ -I dts -O dtb -o rpi-display.dtbo sfe-topphat-overlay.dts # compile
-  sudo cp rpi-display.dtbo /boot/overlays # copy binary to device tree dir
-  sudo echo -e 'dtoverlay=rpi-display,speed=32000000,rotate=270' >> /boot/config.txt # enable overlay
-  # need to reboot to take effect
-  ##
-  # Temp sensor examples:
-  # _ # https://github.com/sparkfun/Qwiic_AS6212_Py # https://learn.sparkfun.com/tutorials/digital-temperature-sensor-breakout---as6212-qwiic-hookup-guide/qwiic-as6212-python-package # https://learn.sparkfun.com/tutorials/digital-temperature-sensor-breakout---as6212-qwiic-hookup-guide/python-examples
-  ##
-
-};
 installDocker(){
   __mkd "$HOME/.scripts"
   local -r dget="https://get.docker.com";
@@ -166,21 +108,6 @@ installDocker(){
     log_error "docker service is not running after install."
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
   fi
-};
-confPostInit(){
-  __mkd "$HOME/.scripts"
-  local -r remote='https://raw.githubusercontent.com/datamonk/milhouse-init';
-  local -r branch='main';
-  local -r extp="/path/to/ext/partition";
-  local -r fatp="/path/to/FAT/boot/partition";
-  local initdarr=( 01-init.d_bootstrap 01-init.d_bootstrap.sh update-boot-partition.sh )
-  for art in "${initdarr[@]}"; do
-    if [[ $art =~ "update" ]]; then
-      curl -fsSL $remote/refs/heads/$branch/$art | sudo bash -s EXT=$extp FAT=$fatp
-    else
-      curl -fsSL $remote/refs/heads/$branch/$art && chmod 750 $art
-    fi
-  done
 };
 confPiOsMisc()){
   local -r rpiconf="/usr/bin/raspi-config";
@@ -197,6 +124,21 @@ confPiOsMisc()){
   sudo raspi-config nonint do_change_timezone America/New_York # set timezone
   sudo sed -i.bak '/do_finish()/,/^$/!d' $rpiconf | sudo sed -e '1i ASK_TO_REBOOT=0;' -e '$a do_finish' | bash # fake out to avoid prompting for reboot
   sudo usermod -aG gpio $USER # ensure $USER is member of gpio grp
+};
+confPostInit(){
+  __mkd "$HOME/.scripts"
+  local -r remote='https://raw.githubusercontent.com/datamonk/milhouse-init';
+  local -r branch='main';
+  local -r extp="/path/to/ext/partition";
+  local -r fatp="/path/to/FAT/boot/partition";
+  local initdarr=( 01-init.d_bootstrap 01-init.d_bootstrap.sh update-boot-partition.sh )
+  for art in "${initdarr[@]}"; do
+    if [[ $art =~ "update" ]]; then
+      curl -fsSL $remote/refs/heads/$branch/$art | sudo bash -s EXT=$extp FAT=$fatp
+    else
+      curl -fsSL $remote/refs/heads/$branch/$art && chmod 750 $art
+    fi
+  done
 };
 bounce(){
   log_warn "rebooting in 15 seconds..." && sleep 5
