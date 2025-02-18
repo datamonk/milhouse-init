@@ -1,27 +1,26 @@
 #!/bin/bash
 #
-# /boot/simple_boot_setup.sh
+# /boot/01-init.d_bootstrap.sh
 #
-# This script is executed by /etc/init.d/simple_boot_setup
+# This script is executed by /etc/init.d/$initfn
 #
 # By default this script does nothing, and removes itself after the
-# first run when called by /etc/init.d/simple_boot_setup
+# first run when called by /etc/init.d/$initfn
 
 # This setting will cause this script to exit if there are any errors.
-set -ue
+set -eu
 
 disable_after_first_run(){
-  if [[ $CALLED_BY == init && $0 == /boot/simple_boot_setup.sh ]]; then
+  local -r initfn='01-init.d_bootstrap';
+  if [[ $CALLED_BY == init && $0 == /boot/$initfn.sh ]]; then
     mv $0 $0.removed_after_first_run
-    update-rc.d simple_boot_setup remove
+    update-rc.d $initfn remove
   fi
 }
 
 ####
 ##   This is where you put your setup code.
 ####
-
-
     ## ## Here are some examples of things you might do...
     ##
     ## ## Remove unneeded packages
@@ -44,7 +43,7 @@ disable_after_first_run(){
     ##
     ## ## fake completing the raspi-config
     ## sed '/do_finish()/,/^$/!d' /usr/bin/raspi-config | sed -e '1i ASK_TO_REBOOT=0;' -e '$a do_finish' | bash
-
+#bash $HOME/proj/github/hamster-cannon/raspi/init.d/
 
 # If you want this script to remain and run at ever boot comment out the next line.
 disable_after_first_run

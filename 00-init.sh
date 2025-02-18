@@ -29,10 +29,19 @@ mntUSB(){
       && log_info "USB media mounted at: [$(mount | grep $usbmnt)]"
     fi
     bsdir="$usbmnt/hc/bootstrap";
+    envpath="$bsdir/.env"
   else
     log_error "usb dev path not found."
     __die "${FUNCNAME[0]}: unable to mnt usb for secrets def. bailing."
   fi
+};
+confWiFi(){
+    local -r wpaconf="/etc/wpa_supplicant/wpa_supplicant.conf";
+    local -r ssid="$(cat $envpath | grep 'ssid' | cut -d':' -f2)";
+    local -r ssid_pw="$(cat $envpath | grep 'ssid_pw' | cut -d':' -f2)";
+    sudo cp "$wpaconf" "$wpaconf.bak" \
+    && sudo wpa_passphrase "$ssid" "$ssid_pw" | tee -a $wpaconf \
+    && sudo sed -i.bak 's/iface wlan0 inet manual/iface wlan0 inet dhcp/; s/wpa-roam/wpa-conf/; $i auto wlan0 eth0' /etc/network/interfaces
 };
 confGit(){
   local -r gitemail="$USER@gmail.com";
@@ -68,11 +77,14 @@ confSsh(){
   install -m 600 /dev/null $HOME/.ssh/config
   echo -e "ForwardX11Trusted yes\nConnectTimeout 0\n\nHost localhost\n  HostName $(hostname)\n\nHost *\n  ForwardX11 yes\n  ForwardAgent yes" >> $HOME/.ssh/config
 };
+removeBloat(){
+  sudo apt --yes remove --purge raspberrypi-artwork omxplayer penguinspuzzle
+};
 updatePi(){
   sudo apt --yes update \
   &&  sudo apt --yes upgrade \
   &&  sudo apt --yes install \
-      htop vim terminator default-jdk nodejs code \
+      usbmount htop vim terminator default-jdk nodejs code \
   && sudo apt --yes autoremove \
   && sudo rpi-eeprom-update -a
 };
@@ -98,6 +110,10 @@ confKeyboard(){
   sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
   sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
 };
+fakeOutRaspiConfig(){
+  local -r rpiconf="/usr/bin/raspi-config";
+  sudo sed -i.bak '/do_finish()/,/^$/!d' $rpiconf | sudo sed -e '1i ASK_TO_REBOOT=0;' -e '$a do_finish' | bash
+};
 bounce(){
   log_warn "rebooting in 15 seconds..." && sleep 5
   log_warn "rebooting in 10 seconds..." && sleep 5
@@ -106,14 +122,17 @@ bounce(){
 };
 execInit(){
   mntUSB
+  confWiFi
   [[ -z "$__inet" ]] && log_error "unable to connect to public domain." \
     && __die "${FUNCNAME[0]}: Check network settings. bailing.";
   confGit
   confSsh
+  removeBloat
   updatePi
   installDocker
   confKeyboard
   log_info "00-init stage complete for $HOSTNAME."
+  fakeOutRaspiConfig
   bounce
 };
 execInit && exit 0
