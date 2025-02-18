@@ -11,8 +11,8 @@
 set -eu
 
 disable_after_first_run(){
-  local -r initfn='01-init.d_bootstrap';
-  if [[ $CALLED_BY == init && $0 == /boot/$initfn.sh ]]; then
+  local -r init_fname='01-init.d_bootstrap';
+  if [[ $CALLED_BY == init && $0 == /boot/$init_fname.sh ]]; then
     mv $0 $0.removed_after_first_run
     update-rc.d $initfn remove
   fi

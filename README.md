@@ -13,5 +13,5 @@ bash `mount | grep "/dev/sda1" | cut -d' ' -f3`/hc/bs.sh
 ```
 ```
 # execute manually
-cd ~ && curl -fsSL https://raw.githubusercontent.com/datamonk/milhouse-init/refs/heads/main/00-init.sh | bash
+cd ~ && curl -fsSL https://raw.githubusercontent.com/datamonk/milhouse-init/refs/heads/main/00.sh | bash
 ```

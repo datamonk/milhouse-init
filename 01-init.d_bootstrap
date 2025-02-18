@@ -1,13 +1,13 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          00init.d_bootstrap
+# Provides:          01-init.d_bootstrap
 # Required-Start:    $local_fs
 # Required-Stop:
 # X-Start-Before:    $network
 # X-Stop-After:
 # Default-Start: 2
 # Default-Stop:
-# Short-Description: Run /boot/00init.d_bootstrap.sh at boot
+# Short-Description: Run /boot/00-init.d_bootstrap.sh at boot
 # Description:
 ### END INIT INFO
 
@@ -18,7 +18,7 @@ set -e
 case "$1" in
   start)
     log_daemon_msg "Running 00init.d_bootstrap"
-    [ -x /boot/00init.d_bootstrap.sh ] && ( CALLED_BY=init /boot/00init.d_bootstrap.sh )
+    [ -x /boot/00-init.d_bootstrap.sh ] && ( CALLED_BY=init /boot/00-init.d_bootstrap.sh )
     ;;
   *)
     echo "Usage: $0 start" >&2
