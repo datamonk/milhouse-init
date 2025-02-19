@@ -151,7 +151,7 @@ bounce(){
   log_warn "rebooting in 5 seconds..." && sleep 5
   shutdown -r now
 };
-run(){
+#run(){
   local -r reboot="false"; # boolean to reboot post 00-init
   [[ -z "$__inet" ]] && log_error "unable to connect to public domain." && __die "Check network settings.";
   for func in "${FUNCNAME[@]}"; do
@@ -163,9 +163,9 @@ run(){
     elif [[ "$reboot" = "false" ]] && [[ "$func" = "bounce" ]]; then
       break; # bail prior to reboot
     fi
-    log_info "starting [$func] eval" \
-    && $func;
+    log_info "starting [$func] eval"
+    eval $func
   done
-};
-run
+#};
+#run
 exit 0
