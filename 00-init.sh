@@ -1,9 +1,14 @@
 #!/bin/bash
-set -eu
+set -e
 
 ## helpers
-bold=""; reset="\e[0m"; green="\e[1;32m"; purple="\e[1;35m"; red="\e[1;31m"; yellow="\e[1;33m";
-__wai=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd);
+bold=""
+reset="\e[0m"
+green="\e[1;32m"
+purple="\e[1;35m"
+red="\e[1;31m"
+yellow="\e[1;33m"
+__wai=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 __inet=$(sh -ic 'exec 3>&1 2>/dev/null; { curl --compressed -Is google.com 1>&3; kill 0; } | { sleep 10; kill 0; }' || :);
 __PROGNAME="${0##*/}";
 __die(){ echo "${bold}${purple}${__PROGNAME}${reset}: error: $1" 1>&2; exit 1; };
