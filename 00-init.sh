@@ -86,15 +86,13 @@ confSsh(){
   echo -e "ForwardX11Trusted yes\nConnectTimeout 0\n\nHost localhost\n  HostName $(hostname)\n\nHost *\n  ForwardX11 yes\n  ForwardAgent yes" >> $HOME/.ssh/config
 };
 removeBloat(){
-  sudo apt --yes remove --purge \
-    hicolor-icon-theme raspberrypi-artwork omxplayer penguinspuzzle \
+  sudo apt --yes remove --purge hicolor-icon-theme geany geany-common thonny
   && sudo apt --yes autoremove
 };
 updatePi(){
   sudo apt --yes update \
   &&  sudo apt --yes upgrade \
-  &&  sudo apt --yes install \
-      usbmount htop vim terminator default-jdk nodejs code libasound2-dev\
+  &&  sudo apt --yes install htop vim terminator default-jdk nodejs code libasound2-dev yq jq \
   && sudo apt --yes autoremove \
   && sudo rpi-eeprom-update -a \
   && sudo raspi-config nonint do_update
@@ -117,7 +115,7 @@ installDocker(){
 confPiOsMisc(){
   local -r rpiconf="/usr/bin/raspi-config";
   local -r klpath="/etc/default/keyboard";
-  local -r model="pc98"; # this layout has issues w/ rk-royal 98k
+  local -r model="pc86"; # this layout has issues w/ rk-royal 98k
   local -r layout="us";
   sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
   sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
