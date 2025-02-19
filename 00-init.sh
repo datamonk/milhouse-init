@@ -151,7 +151,11 @@ bounce(){
   log_warn "rebooting in 5 seconds..." && sleep 5
   shutdown -r now
 };
-#run(){
+
+callStack() { echo "Function call stack:" "${FUNCNAME[@]}"; }
+
+run(){
+  callStack
   local -r reboot="false"; # boolean to reboot post 00-init
   [[ -z "$__inet" ]] && log_error "unable to connect to public domain." && __die "Check network settings.";
   for func in "${FUNCNAME[@]}"; do
@@ -166,6 +170,6 @@ bounce(){
     log_info "starting [$func] eval"
     eval $func
   done
-#};
-#run
-exit 0
+};
+run
+#exit 0
