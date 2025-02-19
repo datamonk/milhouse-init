@@ -109,7 +109,7 @@ installDocker(){
     __die "${FUNCNAME[0]}: docker is not happy. bailing."
   fi
 };
-confPiOsMisc()){
+confPiOsMisc(){
   local -r rpiconf="/usr/bin/raspi-config";
   local -r klpath="/etc/default/keyboard";
   local -r model="pc98"; # this layout has issues w/ rk-royal 98k
