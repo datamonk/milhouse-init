@@ -9,8 +9,8 @@ _inet=$(sh -ic 'exec 3>&1 2>/dev/null; { curl --compressed -Is google.com 1>&3; 
 _die(){ echo "${bold}${purple}${_PROGNAME}${reset}: error: $1" 1>&2; exit 1; };
 _isnotempty(){ [ "$1" ] && return 0 || return 1; };
 _validate_input(){ [ "$2" ] || _die "$1 requires an argument str"; };
-_funclist() { egrep "^[a-z].*\(\) " $0 | cut -d'(' -f1 | grep -v "${FUNCNAME[0]}"; };
-_funcdesc() { egrep "^[a-z].*\(\) " $0; };
+_funclist(){ egrep "^[a-z].*\(\)\{" $0 | cut -d'(' -f1 | grep -v "${FUNCNAME[0]}"; };
+_funcdesc(){ egrep "^[a-z].*\(\)\{" $0; };
 _mkd(){ mkdir -p "$@" && cd "$_"; };
 ## logger
 _echo_stderr(){ >&2 echo "$@"; }; # stderr only
@@ -27,10 +27,15 @@ mntUSB(){
     usbmnt=$(mount | grep "$usbdev" | cut -d' ' -f3)
     if [[ $(_isnotempty $usbmnt) -eq 0 ]]; then
       log_info "existing $usbdev mnt found at [$usbmnt]"
+      sudo umount $usbmnt \
+      && sudo mkdir -p $usbmnt \
+      && sudo mount $usbdev $usbmnt -o rw,uid=$USER,gid=$USER \
+      && log_info "$usbmnt remounted with rw option and ready for use."
     else
       usbmnt="/media/$USER/ORBITKEY";
-      log_warn "$usbdev mnt point returned null. attempting to mnt at [$usbmnt]"
-      sudo mount $usbdev $usbmnt -o uid=$USER,gid=$USER \
+      log_warn "$usbdev mnt point doesn't exist. attempting to mnt [$usbmnt]"
+      sudo mkdir -p $usbmnt \
+      && sudo mount $usbdev $usbmnt -o rw,uid=$USER,gid=$USER \
       && log_info "USB media mounted at: [$(mount | grep $usbmnt)]"
     fi
     bsdir="$usbmnt/hc/bootstrap";
@@ -83,10 +88,11 @@ confSsh(){
   install -m 600 /dev/null $HOME/.ssh/config
   echo -e "ForwardX11Trusted yes\nConnectTimeout 0\n\nHost localhost\n  HostName $(hostname)\n\nHost *\n  ForwardX11 yes\n  ForwardAgent yes" >> $HOME/.ssh/config
 };
-removeBloat(){
-  sudo apt --yes --quiet remove --purge hicolor-icon-theme \
-  && sudo apt --yes --quiet autoremove
-};
+# commenting for now, apt fails when attempting to autoremove 100+ packages
+#removeBloat(){
+#  sudo apt --yes --quiet remove --purge hicolor-icon-theme \
+#  && sudo apt --yes --quiet autoremove
+#};
 updatePi(){
   sudo apt --yes --quiet update \
   &&  sudo apt --yes --quiet upgrade \
@@ -118,8 +124,7 @@ confPiOsMisc(){
   sudo sed -i.bak "s/^XKBMODEL=*.*/XKBMODEL=\"$model\" /" $klpath
   sudo sed -i.bak "s/^XKBLAYOUT=*.*/XKBLAYOUT=\"$layout\" /" $klpath
   #sudo raspi-config nonint do_configure_keyboard <keymap>
-  sudo raspi-config nonint do_boot_behaviour B2 # B2 = console w/ auto login
-  sudo raspi-config nonint do_boot_wait 1 # wait until network interface is up before post boot occurs
+  #sudo raspi-config nonint do_boot_behaviour B2 # B2 = console w/ auto login
   sudo raspi-config nonint do_leds 0 # builtin led triggers on disk i/o
   sudo raspi-config nonint do_change_locale en_GB.UTF-8 # set locale
   sudo raspi-config nonint do_change_timezone America/New_York # set timezone
@@ -151,13 +156,13 @@ bounce(){
 reboot=false;
 declare -rx funcarr=($(_funclist)); # build array from script function name list
 for i in "${funcarr[@]}"; do
-  if [[ "$i" = ^"confwiFi"$ ]]; then
+  if [[ "$i" =~ ^"confwiFi" ]] || [[ "$i" =~ ^"log" ]]; then
     log_warn "skipping [$i] eval per static def";
     continue;
-  elif [[ "$i" = ^"_"[a-z]* ]]; then
+  elif [[ "$i" =~ ^"_"[a-z]* ]]; then
     continue; # skipping helpers prepended w/ '_'
-  elif [[ "$reboot" = "false" ]] && [[ "$i" = "bounce" ]]; then
-    break; # bail prior to reboot
+  elif [ "$reboot" = "false" ] && [ "$i" = "bounce" ]; then
+    continue; # bail prior to reboot
   fi
   log_info "starting [$i] eval";
   eval "$i";
